@@ -1,0 +1,200 @@
+/*
+  Blink
+  https://randomnerdtutorials.com/getting-started-with-esp32/
+  https://randomnerdtutorials.com/projects-esp32/
+  https://randomnerdtutorials.com/projects-esp32/3/
+
+  https://randomnerdtutorials.com/esp32-web-server-arduino-ide/
+  https://randomnerdtutorials.com/projects-esp32/
+  https://randomnerdtutorials.com/getting-started-with-esp32/#ESP32-pinout
+
+
+*/
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include "Arduino.h"
+#include "driver/rtc_io.h"
+// define the number of bytes you want to access
+#define EEPROM_SIZE 1
+RTC_DATA_ATTR int bootCount = 0;
+
+const char* ssid     = "iPhone Milton Chaparro";   //your network SSID
+//const char* ssid     = "MILTON LILIANA";   //your network SSID
+//const char* password = "81781307";   //your network password
+const char* password = "6bp5ke0jow34a";   //your network password
+
+String myDomain = "172.20.10.3"; // IP de telefono
+//String myDomain = "192.168.10.171"; // Ip de casa
+
+String myScript = "/caneca/canecas_api/1/"; // modificado
+
+int waitingTime = 90000; //Wait 30 seconds to google response.
+
+// variables
+const byte pinObstaculo = 4;
+const byte arduinoLed = 23;
+
+const byte pinObstaculo2 = 15;
+const byte arduinoLed2 = 19;
+
+// Holds obstaculoswitch state (1=opened, 0=close)
+//bool state;
+// variable to store the http request
+String canecaState;
+
+
+// Set web server port number to 80
+//WiFiServer server(80);
+
+// auxiliar variables to store the current output state
+//String outputPinObstaculo ;
+
+
+int hayObstaculo = HIGH; // ALTO SIGNIFICA QUE NO HAY OBSTACULOS
+int hayObstaculo2 = HIGH; // ALTO SIGNIFICA QUE NO HAY OBSTACULOS
+
+void setup () {
+
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);// se adiciono
+pinMode (arduinoLed, OUTPUT);
+pinMode (arduinoLed2, OUTPUT);
+Serial.begin(115200);
+  delay(10);
+    WiFi.mode(WIFI_STA);
+
+    Serial.println("");
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);  
+
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println("");
+  Serial.println("STAIP address: ");
+  Serial.println(WiFi.localIP());
+    
+  Serial.println("");
+
+///////////
+
+    
+   
+}
+boolean enviar = true;
+int indicador_sensor1 = 0;
+int indicador_sensor2 = 0;
+void loop () {
+////////////////////sensor uno
+hayObstaculo = digitalRead(pinObstaculo);
+if (hayObstaculo == LOW){
+  if(indicador_sensor1 == 0){
+    Serial.println ("Obstaculo detectado - caneca uno llena ");
+    digitalWrite (arduinoLed, HIGH);
+    String datos = String ('{') + String ('"') + "glass" + String ('"')+ String (':')+ "80" + String ('}') ;
+    saveEstadoCaneca(datos);
+    indicador_sensor1 = 1;
+    Serial.println ("Caneca uno llena, mensaje enviado"); 
+  } 
+}
+else {
+  indicador_sensor1 = 0;
+  digitalWrite (arduinoLed, LOW);
+}
+delay(150);
+
+////////////////////sensor dos
+
+hayObstaculo2 = digitalRead(pinObstaculo2);
+if (hayObstaculo2 == LOW){
+  if(indicador_sensor2 == 0 ){
+    Serial.println ("Obstaculo detectado - caneca dos llena ");
+    digitalWrite (arduinoLed2, HIGH);
+    // En caso de que el sensor sea de otro tipo de residuo cambiar en variable datos
+    String datos = String ('{') + String ('"') + "cardboard" + String ('"')+ String (':')+ "80" + String ('}') ;
+    saveEstadoCaneca(datos);
+    indicador_sensor2 = 1;
+    Serial.println ("Caneca dos llena, mensaje enviado"); 
+  }
+}
+else {
+  indicador_sensor2 = 0;
+  digitalWrite (arduinoLed2, LOW);
+}
+delay(150);
+
+}
+
+///////funcion de llenado
+
+void saveEstadoCaneca( String datos ) {
+  String getAll;
+  String getBody;
+  Serial.println("Connect to " + String(myDomain));
+  WiFiClient client;
+  if (client.connect(myDomain.c_str(), 80)){
+    Serial.println("Connection successful");
+    /*
+    String inicio = String ('{') + String ('"') + "cardboard" + String ('"')+ String (':')+ "50" + String (',') + String ('"') + "glass" + String ('"')+ String (':')+ "50" + String (',') ;
+    String medio =  String ('"') + "metal" + String ('"')+ String (':')+ "50" + String (',') + String ('"') + "paper" + String ('"')+ String (':')+ "50" + String (',') ;
+    String fin =  String ('"') + "plastic" + String ('"')+ String (':')+ "50" + String (',') + String ('"') + "trash" + String ('"')+ String (':')+ "50" + String ('}')  ;
+    */
+    //String total = inicio + medio+  fin ;
+
+    String Data = datos;
+         
+    Serial.println("Send a estado caenca a  Servidor Ecociencia.");
+    
+    client.println("PUT " + myScript + " HTTP/1.1");
+    client.println("Host: " + String(myDomain));
+    client.println("Authorization: Basic bWlsbGVyOjEyMzQ1Ng==" );
+    client.println("Content-Length: " + String(Data.length()));
+    client.println("Content-Type:application/json");
+    client.println();
+    
+    client.print(Data);
+       
+    Serial.println("Waiting for response.");
+    long int StartTime=millis();
+    while (!client.available()) {
+      Serial.print(".");
+      delay(100);
+      if ((StartTime+waitingTime) < millis()) {
+        Serial.println();
+        Serial.println("No response.");
+        break;
+      }
+    }
+    Serial.println("Respuesta desde aquí"); 
+      
+    int timoutTimer = 10000;
+    long startTimer = millis();
+    boolean state = false;
+    
+    while ((startTimer + timoutTimer) > millis()) {
+      Serial.print(".");
+      delay(100);      
+      while (client.available()) {
+        char c = client.read();
+        if (c == '\n') {
+          if (getAll.length()==0) { state=true; }
+          getAll = "";
+        }
+        else if (c != '\r') { getAll += String(c); }
+        if (state==true) { getBody += String(c); }
+        startTimer = millis();
+      }
+      if (getBody.length()>0) { break; }
+    }
+    Serial.println();
+    client.stop();
+    Serial.println(getBody); 
+  
+    
+  } else {         
+    Serial.println("Connected to " + String(myDomain) + " failed.");
+  }
+  client.stop();
+}// cierra el saveEstadoCaneca
